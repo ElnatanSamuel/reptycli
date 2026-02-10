@@ -2,6 +2,7 @@ import { CommandDatabase, SearchFilters } from '../database/db';
 import { NLPParser } from '../nlp/parser';
 import { CommandMatcher } from '../nlp/matcher';
 import { getConfig } from '../utils/config';
+import { ChainDetector } from '../chains/detector';
 import inquirer from 'inquirer';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -29,45 +30,69 @@ export async function executeCommand(query: string): Promise<void> {
       keywords: parser.extractKeywords(parsedQuery)
     };
 
-    // Search database
+    // Search database for single commands
     const commands = db.searchCommands(filters, config.maxResults);
+    
+    // Find chains
+    const detector = new ChainDetector(db);
+    const chains = detector.findChainsForQuery(query);
 
     // Rank results
     const rankedCommands = matcher.rankCommands(commands, parsedQuery);
     const relevantCommands = matcher.filterRelevant(rankedCommands);
 
-    if (relevantCommands.length === 0) {
-      console.log(chalk.yellow('No matching commands found.'));
+    if (relevantCommands.length === 0 && chains.length === 0) {
+      console.log(chalk.yellow('No matching commands or sequences found.'));
       return;
     }
 
-    // If multiple results, let user choose
-    let selectedCommand = relevantCommands[0];
+    // Combine results for selection
+    let choices: any[] = [];
+    
+    // Add chains first if found
+    chains.slice(0, 3).forEach((chain, idx) => {
+      choices.push({
+        name: `${chalk.yellow('⛓ Sequence:')} ${chain.commands.join(' → ')}`,
+        value: { type: 'chain', data: chain.commands }
+      });
+    });
 
-    if (relevantCommands.length > 1) {
-      const choices = relevantCommands.slice(0, 10).map((cmd, idx) => ({
+    // Add single commands
+    relevantCommands.slice(0, 7).forEach((cmd) => {
+      choices.push({
         name: `${cmd.command} (${new Date(cmd.timestamp).toLocaleString()})`,
-        value: idx
-      }));
+        value: { type: 'single', data: cmd.command }
+      });
+    });
 
+    let selected: { type: string; data: any };
+
+    if (choices.length === 1) {
+      selected = choices[0].value;
+    } else {
       const answer = await inquirer.prompt([
         {
           type: 'list',
-          name: 'commandIndex',
-          message: 'Multiple commands found. Select one:',
+          name: 'selected',
+          message: 'Found the following matches. Select one to run:',
           choices: choices
         }
       ]);
-
-      selectedCommand = relevantCommands[answer.commandIndex];
+      selected = answer.selected;
     }
 
+    const commandsToRun = selected.type === 'chain' ? selected.data : [selected.data];
+
     // Confirm execution
+    const confirmMessage = selected.type === 'chain' 
+      ? `Execute sequence:\n${commandsToRun.map((c: string) => `  ↳ ${c}`).join('\n')}?`
+      : `Execute: ${chalk.bold(commandsToRun[0])}?`;
+
     const confirmAnswer = await inquirer.prompt([
       {
         type: 'confirm',
         name: 'execute',
-        message: `Execute: ${chalk.bold(selectedCommand.command)}?`,
+        message: confirmMessage,
         default: false
       }
     ]);
@@ -77,26 +102,36 @@ export async function executeCommand(query: string): Promise<void> {
       return;
     }
 
-    // Execute the command
-    console.log(chalk.cyan(`\nExecuting: ${selectedCommand.command}\n`));
-    
-    try {
-      const { stdout, stderr } = await execAsync(selectedCommand.command);
+    // Execute the commands
+    for (const cmd of commandsToRun) {
+      console.log(chalk.cyan(`\nExecuting: ${cmd}\n`));
       
-      if (stdout) {
-        console.log(stdout);
+      try {
+        const { stdout, stderr } = await execAsync(cmd);
+        if (stdout) console.log(stdout);
+        if (stderr) console.error(chalk.red(stderr));
+        console.log(chalk.green(`✓ Done: ${cmd}`));
+      } catch (error: any) {
+        console.error(chalk.red(`\n✗ Command failed: ${cmd}`));
+        console.error(chalk.red(`Exit code: ${error.code}`));
+        if (error.stdout) console.log(error.stdout);
+        if (error.stderr) console.error(chalk.red(error.stderr));
+        
+        if (selected.type === 'chain') {
+          const stopAnswer = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'continue',
+              message: 'A command in the sequence failed. Continue with the rest?',
+              default: false
+            }
+          ]);
+          if (!stopAnswer.continue) break;
+        }
       }
-      
-      if (stderr) {
-        console.error(chalk.red(stderr));
-      }
-      
-      console.log(chalk.green('\n✓ Command executed successfully'));
-    } catch (error: any) {
-      console.error(chalk.red(`\n✗ Command failed with exit code ${error.code}`));
-      if (error.stdout) console.log(error.stdout);
-      if (error.stderr) console.error(chalk.red(error.stderr));
     }
+
+    console.log(chalk.green('\n✓ Finished execution'));
   } finally {
     db.close();
   }

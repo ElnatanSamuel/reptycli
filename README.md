@@ -11,7 +11,7 @@ Repty is a CLI tool that captures your terminal commands and lets you search the
 -  **Natural Language Search**: "what git command did I use last Friday?"
 -  **Date Parsing**: Search by "yesterday", "last week", "3 days ago"
 -  **Smart Matching**: Fuzzy search with relevance scoring
--  **Command Execution**: Find and run commands directly
+-  **Command Chaining**: Automatically detects and suggests command sequences (e.g., `git add` → `commit` → `push`)
 -  **Privacy First**: All data stored locally in SQLite
 -  **Auto-exclude**: Automatically filters commands with sensitive patterns
 
@@ -62,6 +62,15 @@ repty run "git reset command"
 ```
 
 This will search, let you select from matches, and execute after confirmation.
+
+### 5. Detect and run command chains
+If you frequently run commands together (like a Git workflow), Repty will detect them as a **Sequence**.
+
+```bash
+repty run "push my changes"
+```
+
+Repty will suggest the entire chain (e.g., `git add` + `git commit` + `git push`) and allow you to run them sequentially.
 
 ## Commands
 
@@ -134,6 +143,7 @@ Repty uses offline NLP libraries to parse your queries:
 3. **Stemming**: Reduces words to their root form for better matching
 4. **Command Type Detection**: Identifies command types (git, npm, docker, etc.)
 5. **Fuzzy Matching**: Uses Levenshtein distance for typo tolerance
+6. **Sequence Detection**: Identifies patterns of commands run in the same directory within a short timeframe
 
 ### Scoring Algorithm
 
@@ -157,6 +167,17 @@ CREATE TABLE commands (
   exit_code INTEGER,
   tags TEXT,
   description TEXT
+);
+```
+
+### Table: `command_chains`
+Stores detected sequences and their frequency:
+```sql
+CREATE TABLE command_chains (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  commands_text TEXT NOT NULL UNIQUE,
+  count INTEGER DEFAULT 1,
+  last_used INTEGER NOT NULL
 );
 ```
 

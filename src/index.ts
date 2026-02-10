@@ -6,6 +6,7 @@ import { logCommand } from './cli/log';
 import { CommandDatabase } from './database/db';
 import { getConfig, shouldExcludeCommand } from './utils/config';
 import { formatCommandList, formatStats } from './utils/formatter';
+import { ChainDetector } from './chains/detector';
 
 import chalk from 'chalk';
 import fs from 'fs';
@@ -165,6 +166,10 @@ if (process.argv[2] === '__capture__') {
             directory,
             exitCode
           });
+          
+          // Detect chains
+          const detector = new ChainDetector(db);
+          await detector.detectAndRecord(command.trim(), directory);
         } finally {
           db.close();
         }

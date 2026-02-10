@@ -50,3 +50,27 @@ export function formatStats(stats: { total: number; today: number; thisWeek: num
   
   return output.join('\n');
 }
+
+export function formatChain(commands: string[], score?: number): string {
+  let output = '';
+  if (score !== undefined) {
+    output += chalk.gray(`[Chain Score: ${score}] `);
+  }
+  output += chalk.yellow.bold('⛓ Sequence: ') + '\n';
+  output += commands.map(cmd => chalk.white(`  ↳ ${cmd}`)).join('\n');
+  return output;
+}
+
+export function formatChainList(chains: { commands: string[]; score: number }[]): string {
+  if (chains.length === 0) return '';
+
+  const output: string[] = [];
+  output.push(chalk.bold.yellow(`\n🔗 Suggested Command Sequences:\n`));
+  
+  chains.forEach((chain, idx) => {
+    output.push(chalk.gray(`${idx + 1}. `) + formatChain(chain.commands, chain.score));
+    output.push('');
+  });
+
+  return output.join('\n');
+}

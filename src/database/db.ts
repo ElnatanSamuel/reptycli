@@ -13,6 +13,13 @@ export interface Command {
   description?: string;
 }
 
+export interface CommandChain {
+  id?: number;
+  commandsText: string;
+  count: number;
+  lastUsed: number;
+}
+
 export interface SearchFilters {
   startDate?: Date;
   endDate?: Date;
@@ -69,9 +76,19 @@ export class CommandDatabase {
       );
     `);
 
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS command_chains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        commands_text TEXT NOT NULL UNIQUE,
+        count INTEGER DEFAULT 1,
+        last_used INTEGER NOT NULL
+      );
+    `);
+
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON commands(timestamp);`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_tags ON commands(tags);`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_directory ON commands(directory);`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_chain_usage ON command_chains(count DESC, last_used DESC);`);
   }
 
   insertCommand(cmd: Command): number {
@@ -203,6 +220,49 @@ export class CommandDatabase {
       today: todayResult[0]?.values[0]?.[0] as number || 0,
       thisWeek: weekResult[0]?.values[0]?.[0] as number || 0
     };
+  }
+
+  getFrequentChains(limit: number = 10): CommandChain[] {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      'SELECT * FROM command_chains ORDER BY count DESC, last_used DESC LIMIT ?',
+      [limit]
+    );
+
+    if (result.length === 0) return [];
+
+    const columns = result[0].columns;
+    const rows = result[0].values;
+
+    return rows.map((row: any[]) => {
+      const obj: any = {};
+      columns.forEach((col: string, idx: number) => {
+        obj[col] = row[idx];
+      });
+
+      return {
+        id: obj.id,
+        commandsText: obj.commands_text,
+        count: obj.count,
+        lastUsed: obj.last_used
+      };
+    });
+  }
+
+  recordChainUsage(commands: string[]): void {
+    if (!this.db) throw new Error('Database not initialized');
+    const commandsText = commands.join(' && ');
+
+    this.db.run(
+      `INSERT INTO command_chains (commands_text, count, last_used)
+       VALUES (?, 1, ?)
+       ON CONFLICT(commands_text) DO UPDATE SET
+       count = count + 1,
+       last_used = ?`,
+      [commandsText, Date.now(), Date.now()]
+    );
+    this.save();
   }
 
   private save(): void {

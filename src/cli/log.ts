@@ -1,5 +1,6 @@
 import { CommandDatabase } from '../database/db';
 import { getConfig, shouldExcludeCommand } from '../utils/config';
+import { ChainDetector } from '../chains/detector';
 import chalk from 'chalk';
 
 export async function logCommand(command: string, directory?: string, exitCode?: number): Promise<void> {
@@ -21,6 +22,10 @@ export async function logCommand(command: string, directory?: string, exitCode?:
       directory: directory || process.cwd(),
       exitCode
     });
+
+    // Detect chains
+    const detector = new ChainDetector(db);
+    await detector.detectAndRecord(command, directory || process.cwd());
 
     console.log(chalk.green(`✓ Command logged (ID: ${id})`));
   } finally {
