@@ -203,10 +203,11 @@ const aliasPromo = program
   .description('Manage command aliases')
   .passThroughOptions()
   .action(async (name, commandParts) => {
-    if (name && commandParts && commandParts.length > 0) {
-      await addAlias(name, commandParts);
+    if (name) {
+      // name is provided, commandParts might be empty (which triggers interactive prompt in addAlias)
+      await addAlias(name, commandParts || []);
     } else {
-      // If no name/command, show help for the alias command group
+      // If no name, show help for the alias command group
       aliasPromo.outputHelp();
     }
   });

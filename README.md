@@ -62,10 +62,14 @@ Searches your history. If you are inside a Git repository or NPM project, Repty 
 ### `repty r <query>` (Run)
 Finds and executes a command. If multiple relevant matches are found, it opens an **Interactive Picker**.
 
-### `repty a <name> <command>` (Alias)
+### `repty a <name> [command]` (Alias)
 Creates a manual shorthand.
-- Supports single commands: `repty a p "git push"`
-- Supports sequences: `repty a deploy "npm run build | docker build ."`
+- **Easy Mode (Recommended)**: `repty a publish` (Prompts you for the command - **No quotes needed!**)
+- **Direct Mode**: `repty a p "git push"`
+
+> [!TIP]
+> **Avoid Shell Interference**
+> Large commands with pipes (`|`) or redirects like `>` can be intercepted by your shell. Using the **Easy Mode** (running `repty a name` without a command) triggers an interactive prompt where you can paste your full workflow safely without any quotes.
 
 ### `repty clear`
 Safely manage your history data.

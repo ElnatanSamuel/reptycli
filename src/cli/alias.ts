@@ -1,15 +1,34 @@
 import { CommandDatabase } from '../database/db';
 import { getConfig } from '../utils/config';
 import chalk from 'chalk';
+import inquirer from 'inquirer';
 
 export async function addAlias(name: string, commandParts: string | string[]): Promise<void> {
   const config = getConfig();
   const db = new CommandDatabase(config.dbPath);
   await db.init();
 
-  const command = Array.isArray(commandParts) ? commandParts.join(' ') : commandParts;
+  let command = Array.isArray(commandParts) ? commandParts.join(' ') : commandParts;
 
   try {
+    // Interactive Fallback: If no command provided OR shell pipe detected
+    const isPiped = !process.stdout.isTTY || !process.stdin.isTTY;
+    
+    if (!command || command.trim().length === 0 || isPiped) {
+      if (isPiped && command) {
+        console.log(chalk.bold.red('\n🛑 Potential Shell Interference Detected!'));
+        console.log(chalk.yellow(`Your shell likely intercepted a pipe. Only captured: "${command}"`));
+      }
+
+      const answer = await inquirer.prompt([{
+        type: 'input',
+        name: 'command',
+        message: `Enter the full command for alias ${chalk.cyan(name)}:`,
+        validate: (input: string) => input.trim().length > 0 || 'Command cannot be empty'
+      }]);
+      command = answer.command;
+    }
+
     // Validation: Check if the command seems cut off by a shell pipe
     if (command.trim().endsWith('|')) {
       console.log(chalk.yellow('\n⚠️  Warning: Your command ends with a pipe ("|").'));
