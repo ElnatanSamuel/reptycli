@@ -265,6 +265,19 @@ export class CommandDatabase {
     this.save();
   }
 
+  clearChains(): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('DELETE FROM command_chains');
+    this.save();
+  }
+
+  clearHistory(): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('DELETE FROM commands');
+    this.db.run('DELETE FROM command_chains');
+    this.save();
+  }
+
   private save(): void {
     if (!this.db) return;
     

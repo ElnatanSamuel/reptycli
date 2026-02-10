@@ -9,6 +9,7 @@ import { formatCommandList, formatStats } from './utils/formatter';
 import { ChainDetector } from './chains/detector';
 
 import chalk from 'chalk';
+import inquirer from 'inquirer';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -142,6 +143,41 @@ program
       console.error(chalk.red(`Failed to update ${configFile}: ${err.message}`));
       console.log('Please add the following line manually:');
       console.log(chalk.cyan(`source ${targetScriptPath}`));
+    }
+  });
+
+program
+  .command('clear')
+  .description('Clear command history or sequences')
+  .option('-s, --sequences', 'Clear only command sequences (chains)')
+  .option('-a, --all', 'Clear all command history and sequences')
+  .action(async (options) => {
+    const config = getConfig();
+    const db = new CommandDatabase(config.dbPath);
+    await db.init();
+
+    try {
+      if (options.all) {
+        const answer = await inquirer.prompt([{
+          type: 'confirm',
+          name: 'confirm',
+          message: chalk.red('Are you sure you want to clear ALL command history and sequences?'),
+          default: false
+        }]);
+        if (answer.confirm) {
+          db.clearHistory();
+          console.log(chalk.green('✓ All command history and sequences cleared.'));
+        }
+      } else if (options.sequences) {
+        db.clearChains();
+        console.log(chalk.green('✓ Command sequences cleared.'));
+      } else {
+        console.log(chalk.yellow('Please specify what to clear:'));
+        console.log('  repty clear --sequences  (Clear only chains)');
+        console.log('  repty clear --all        (Clear everything)');
+      }
+    } finally {
+      db.close();
     }
   });
 

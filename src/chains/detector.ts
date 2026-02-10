@@ -22,21 +22,24 @@ export class ChainDetector {
 
     if (sameDir.length < 2) return;
 
-    // We look for patterns like:
-    // [cmd1, cmd2]
-    // [cmd1, cmd2, cmd3]
+    // Time proximity: commands must be within 5 minutes of each other
+    const MAX_GAP = 5 * 60 * 1000;
     
-    // For simplicity, let's look for the last 2 and 3 commands
-    const commands = sameDir.map(c => c.command).reverse(); // Oldest first
-    const last3 = commands.slice(-3);
-    const last2 = commands.slice(-2);
+    // sameDir is ordered by timestamp DESC (recent first)
+    const last3 = sameDir.slice(0, 3);
+    const last2 = sameDir.slice(0, 2);
 
     if (last3.length === 3) {
-      this.db.recordChainUsage(last3);
-    }
-    
-    if (last2.length === 2) {
-      this.db.recordChainUsage(last2);
+      const gap1 = last3[0].timestamp - last3[1].timestamp;
+      const gap2 = last3[1].timestamp - last3[2].timestamp;
+      if (gap1 < MAX_GAP && gap2 < MAX_GAP) {
+        this.db.recordChainUsage(last3.map(c => c.command).reverse());
+      }
+    } else if (last2.length === 2) {
+      const gap = last2[0].timestamp - last2[1].timestamp;
+      if (gap < MAX_GAP) {
+        this.db.recordChainUsage(last2.map(c => c.command).reverse());
+      }
     }
   }
 
@@ -44,24 +47,50 @@ export class ChainDetector {
    * Finds chains that match a search query.
    */
   findChainsForQuery(query: string): ChainCandidate[] {
-    const chains = this.db.getFrequentChains(20);
+    const chains = this.db.getFrequentChains(50);
     const results: ChainCandidate[] = [];
+    const queryLower = query.toLowerCase();
 
     for (const chain of chains) {
-      const commands = chain.commandsText.split(' && ');
-      // If the query matches any part of the chain or any command in it
-      const matches = commands.some(cmd => 
-        cmd.toLowerCase().includes(query.toLowerCase())
-      ) || chain.commandsText.toLowerCase().includes(query.toLowerCase());
+      // ONLY suggest chains that have been seen more than once
+      if (chain.count < 2) continue;
 
-      if (matches) {
+      const commands = chain.commandsText.split(' && ');
+      
+      // A chain is relevant if the query matches a command in the chain significantly.
+      // We look for "primary" commands, not just any substring.
+      let highestMatchScore = 0;
+      let isStrictMatch = false;
+
+      for (const cmd of commands) {
+        const cmdLower = cmd.toLowerCase();
+        
+        // Exact command match or query is the command itself (e.g., query "git push" matches "git push origin main")
+        if (cmdLower === queryLower || cmdLower.startsWith(queryLower + ' ') || cmdLower === 'git ' + queryLower) {
+          highestMatchScore = Math.max(highestMatchScore, 100);
+          isStrictMatch = true;
+        } else if (cmdLower.includes(queryLower)) {
+          // Substring match
+          highestMatchScore = Math.max(highestMatchScore, 50);
+        }
+      }
+
+      if (isStrictMatch || highestMatchScore >= 50) {
+        let score = (chain.count * 10) + highestMatchScore;
+        
+        // Bonus if the query matches the last command in the sequence (the "result" of the chain)
+        if (commands[commands.length - 1].toLowerCase().includes(queryLower)) {
+          score += 20;
+        }
+
         results.push({
           commands,
-          score: chain.count * 10 // Basic scoring
+          score
         });
       }
     }
 
-    return results;
+    // Sort by score
+    return results.sort((a, b) => b.score - a.score);
   }
 }

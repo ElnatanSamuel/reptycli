@@ -132,6 +132,13 @@ Display shell integration setup instructions.
 repty init
 ```
 
+### `repty clear`
+Clear command history or sequences.
+
+**Options:**
+- `-s, --sequences`: Clear only command sequences (chains)
+- `-a, --all`: Clear all command history and sequences
+
 ## How It Works
 
 ### Natural Language Processing
