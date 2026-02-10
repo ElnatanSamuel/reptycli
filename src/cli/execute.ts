@@ -39,7 +39,7 @@ export async function executeCommand(query: string): Promise<void> {
 
     // Rank results
     const rankedCommands = matcher.rankCommands(commands, parsedQuery);
-    const relevantCommands = matcher.filterRelevant(rankedCommands);
+    const relevantCommands = matcher.filterRelevant(rankedCommands, parsedQuery);
 
     if (relevantCommands.length === 0 && chains.length === 0) {
       console.log(chalk.yellow('No matching commands or sequences found.'));

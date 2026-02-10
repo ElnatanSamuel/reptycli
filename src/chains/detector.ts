@@ -18,7 +18,8 @@ export class ChainDetector {
    */
   async detectAndRecord(currentCommand: string, directory: string): Promise<void> {
     const recent = this.db.getRecentCommands(10); // Look at last 10 commands
-    const sameDir = recent.filter(c => c.directory === directory);
+    // Filter by directory AND exclude repty commands
+    const sameDir = recent.filter(c => c.directory === directory && !c.command.startsWith('repty '));
 
     if (sameDir.length < 2) return;
 

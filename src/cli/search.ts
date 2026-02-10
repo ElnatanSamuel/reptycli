@@ -34,7 +34,7 @@ export async function searchCommand(query: string): Promise<void> {
 
     // Rank results
     const rankedCommands = matcher.rankCommands(commands, parsedQuery);
-    const relevantCommands = matcher.filterRelevant(rankedCommands);
+    const relevantCommands = matcher.filterRelevant(rankedCommands, parsedQuery);
 
     // Display results
     console.log(formatCommandList(relevantCommands, true));

@@ -75,7 +75,37 @@ export class CommandMatcher {
   /**
    * Filter commands that don't meet minimum criteria
    */
-  filterRelevant(scoredCommands: ScoredCommand[], minScore: number = 5): ScoredCommand[] {
-    return scoredCommands.filter(cmd => cmd.score >= minScore);
+  filterRelevant(scoredCommands: ScoredCommand[], parsedQuery: ParsedQuery): ScoredCommand[] {
+    if (scoredCommands.length === 0) return [];
+
+    // If query has specific command type or action, favor commands that match at least one of those strongly
+    const hasPrimaryCriteria = parsedQuery.commandType || parsedQuery.action;
+    const topScore = scoredCommands[0].score;
+    
+    return scoredCommands.filter(cmd => {
+      // Basic threshold
+      if (cmd.score < 5) return false;
+
+      // If user specified "git push", don't show "git status" even if it has a high score from "git"
+      if (hasPrimaryCriteria) {
+        const cmdLower = cmd.command.toLowerCase();
+        const matchesType = parsedQuery.commandType && cmdLower.startsWith(parsedQuery.commandType);
+        const matchesAction = parsedQuery.action && cmdLower.includes(parsedQuery.action);
+        
+        // If we have both type and action in query (e.g. "git push"), 
+        // we should really prioritize commands matching the action.
+        if (parsedQuery.action && !matchesAction) {
+          return false; // Filter out if action is missing
+        }
+      }
+
+      // Dynamic threshold: exclude items that are significantly worse than the best match
+      // But only if we have a very strong match (> 80)
+      if (topScore > 80 && cmd.score < topScore * 0.6) {
+        return false;
+      }
+
+      return true;
+    });
   }
 }

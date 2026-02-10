@@ -18,7 +18,9 @@ export function getConfig(): Config {
       'token',
       'secret',
       'api_key',
-      'apikey'
+      'apikey',
+      // Exclude repty itself to avoid meta-logging
+      'repty '
     ],
     maxResults: 50
   };
