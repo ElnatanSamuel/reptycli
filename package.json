@@ -1,6 +1,6 @@
 {
   "name": "repty",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Terminal command history with natural language search",
   "main": "dist/index.js",
   "bin": {
