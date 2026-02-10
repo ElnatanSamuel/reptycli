@@ -2,12 +2,21 @@ import { CommandDatabase } from '../database/db';
 import { getConfig } from '../utils/config';
 import chalk from 'chalk';
 
-export async function addAlias(name: string, command: string): Promise<void> {
+export async function addAlias(name: string, commandParts: string | string[]): Promise<void> {
   const config = getConfig();
   const db = new CommandDatabase(config.dbPath);
   await db.init();
 
+  const command = Array.isArray(commandParts) ? commandParts.join(' ') : commandParts;
+
   try {
+    // Validation: Check if the command seems cut off by a shell pipe
+    if (command.trim().endsWith('|')) {
+      console.log(chalk.yellow('\n⚠️  Warning: Your command ends with a pipe ("|").'));
+      console.log(chalk.gray('If you intended to include a pipe in the alias, please use quotes:'));
+      console.log(chalk.cyan(`  repty a ${name} "command | another_command"\n`));
+    }
+
     // Support "|" as a separator for manual chains
     if (command.includes('|')) {
       const parts = command.split('|').map(p => p.trim()).filter(p => p.length > 0);

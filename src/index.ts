@@ -25,7 +25,8 @@ const program = new Command();
 program
   .name('repty')
   .description('Terminal command history with natural language search')
-  .version(pkg.version);
+  .version(pkg.version)
+  .enablePositionalOptions();
 
 program
   .command('search <query...>')
@@ -151,7 +152,7 @@ program
         margin: 1,
         borderStyle: 'round',
         borderColor: 'cyan',
-        title: '🚀 Setup Complete',
+        title: 'Setup Complete',
         titleAlignment: 'center'
       }));
     } catch (err: any) {
@@ -197,12 +198,13 @@ program
   });
 
 const aliasPromo = program
-  .command('alias [name] [command]')
+  .command('alias [name] [command...]')
   .alias('a')
   .description('Manage command aliases')
-  .action(async (name, command) => {
-    if (name && command) {
-      await addAlias(name, command);
+  .passThroughOptions()
+  .action(async (name, commandParts) => {
+    if (name && commandParts && commandParts.length > 0) {
+      await addAlias(name, commandParts);
     } else {
       // If no name/command, show help for the alias command group
       aliasPromo.outputHelp();
@@ -210,7 +212,7 @@ const aliasPromo = program
   });
 
 aliasPromo
-  .command('add <name> <command>')
+  .command('add <name> <command...>')
   .description('Add a new command alias')
   .action(addAlias);
 
@@ -256,5 +258,25 @@ if (process.argv[2] === '__capture__') {
     }
   })();
 } else {
-  program.parse();
+  // Direct Alias Execution support
+  const args = process.argv.slice(2);
+  const possibleAlias = args[0];
+
+  if (possibleAlias && !possibleAlias.startsWith('-') && !program.commands.some(c => c.name() === possibleAlias || c.alias() === possibleAlias)) {
+    (async () => {
+      const db = new CommandDatabase(getConfig().dbPath);
+      await db.init();
+      const alias = db.getAlias(possibleAlias);
+      db.close();
+
+      if (alias) {
+        await executeCommand(possibleAlias);
+        return;
+      } else {
+        program.parse();
+      }
+    })();
+  } else {
+    program.parse();
+  }
 }
