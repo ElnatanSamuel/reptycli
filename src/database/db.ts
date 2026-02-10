@@ -11,6 +11,7 @@ export interface Command {
   exitCode?: number;
   tags?: string;
   description?: string;
+  alias?: string;
 }
 
 export interface CommandChain {
@@ -18,6 +19,7 @@ export interface CommandChain {
   commandsText: string;
   count: number;
   lastUsed: number;
+  alias?: string;
 }
 
 export interface SearchFilters {
@@ -26,6 +28,7 @@ export interface SearchFilters {
   commandType?: string;
   keywords?: string[];
   directory?: string;
+  projectRoot?: string;
 }
 
 export class CommandDatabase {
@@ -85,6 +88,14 @@ export class CommandDatabase {
       );
     `);
 
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS aliases (
+        name TEXT PRIMARY KEY,
+        commands_text TEXT NOT NULL,
+        type TEXT NOT NULL -- 'single' or 'chain'
+      );
+    `);
+
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_timestamp ON commands(timestamp);`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_tags ON commands(tags);`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_directory ON commands(directory);`);
@@ -141,8 +152,13 @@ export class CommandDatabase {
     }
 
     if (filters.directory) {
-      query += ' AND directory = ?';
-      params.push(filters.directory);
+      if (filters.projectRoot) {
+        query += ' AND directory LIKE ?';
+        params.push(`${filters.projectRoot}%`);
+      } else {
+        query += ' AND directory = ?';
+        params.push(filters.directory);
+      }
     }
 
     query += ' ORDER BY timestamp DESC LIMIT ?';
@@ -275,7 +291,74 @@ export class CommandDatabase {
     if (!this.db) throw new Error('Database not initialized');
     this.db.run('DELETE FROM commands');
     this.db.run('DELETE FROM command_chains');
+    this.db.run('DELETE FROM aliases');
     this.save();
+  }
+
+  // Alias Management
+  addAlias(name: string, commandsText: string, type: 'single' | 'chain'): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run(
+      'INSERT OR REPLACE INTO aliases (name, commands_text, type) VALUES (?, ?, ?)',
+      [name, commandsText, type]
+    );
+    this.save();
+  }
+
+  getAlias(name: string): { name: string; commandsText: string; type: string } | null {
+    if (!this.db) throw new Error('Database not initialized');
+    const result = this.db.exec('SELECT * FROM aliases WHERE name = ?', [name]);
+    if (result.length === 0) return null;
+    
+    const row = result[0].values[0];
+    return {
+      name: row[0] as string,
+      commandsText: row[1] as string,
+      type: row[2] as string
+    };
+  }
+
+  getAllAliases(): { name: string; commandsText: string; type: string }[] {
+    if (!this.db) throw new Error('Database not initialized');
+    const result = this.db.exec('SELECT * FROM aliases ORDER BY name ASC');
+    if (result.length === 0) return [];
+
+    return result[0].values.map((row: any[]) => ({
+      name: row[0] as string,
+      commandsText: row[1] as string,
+      type: row[2] as string
+    }));
+  }
+
+  deleteAlias(name: string): void {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('DELETE FROM aliases WHERE name = ?', [name]);
+    this.save();
+  }
+
+  getChainById(id: number): CommandChain | null {
+    if (!this.db) throw new Error('Database not initialized');
+    const result = this.db.exec('SELECT * FROM command_chains WHERE id = ?', [id]);
+    if (result.length === 0) return null;
+
+    const row = result[0].values[0];
+    return {
+      id: row[0] as number,
+      commandsText: row[1] as string,
+      count: row[2] as number,
+      lastUsed: row[3] as number
+    };
+  }
+
+  findProjectRoot(startDir: string): string | null {
+    let current = startDir;
+    while (current !== path.parse(current).root) {
+      if (fs.existsSync(path.join(current, '.git')) || fs.existsSync(path.join(current, 'package.json'))) {
+        return current;
+      }
+      current = path.dirname(current);
+    }
+    return null;
   }
 
   private save(): void {

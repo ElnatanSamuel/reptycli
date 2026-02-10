@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { searchCommand } from './cli/search';
 import { executeCommand } from './cli/execute';
 import { logCommand } from './cli/log';
+import { addAlias, listAliases, removeAlias } from './cli/alias';
 import { CommandDatabase } from './database/db';
 import { getConfig, shouldExcludeCommand } from './utils/config';
 import { formatCommandList, formatStats } from './utils/formatter';
@@ -13,17 +14,22 @@ import inquirer from 'inquirer';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import boxen from 'boxen';
+import updateNotifier from 'update-notifier';
 
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+updateNotifier({ pkg }).notify();
 
 const program = new Command();
 
 program
   .name('repty')
   .description('Terminal command history with natural language search')
-  .version('1.0.0');
+  .version(pkg.version);
 
 program
   .command('search <query...>')
+  .alias('s')
   .description('Search command history using natural language')
   .action(async (queryParts: string[]) => {
     const query = queryParts.join(' ');
@@ -32,6 +38,7 @@ program
 
 program
   .command('run <query...>')
+  .alias('r')
   .description('Search and execute a command from history')
   .action(async (queryParts: string[]) => {
     const query = queryParts.join(' ');
@@ -129,16 +136,24 @@ program
     try {
       const currentConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf-8') : '';
       
-      if (currentConfig.includes(targetScriptPath)) {
-        console.log(chalk.green(`✓ Repty is already configured in ${configFile}`));
-      } else {
+      if (!currentConfig.includes(targetScriptPath)) {
         fs.appendFileSync(configFile, sourceLine);
-        console.log(chalk.green(`✓ Added shell integration to ${configFile}`));
       }
       
-      console.log(chalk.cyan('\n🚀 Setup complete!'));
-      console.log(chalk.yellow(`Please run: source ${configFile}`));
-      console.log(chalk.gray('(Or just open a new terminal tab)'));
+      const message = 
+        chalk.green('✓ Repty shell integration configured!') + '\n\n' +
+        chalk.white('Added to: ') + chalk.cyan(configFile) + '\n\n' +
+        chalk.yellow('Please run: ') + chalk.bold(`source ${configFile}`) + '\n' +
+        chalk.gray('(Or just open a new terminal tab)');
+
+      console.log('\n' + boxen(message, {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'round',
+        borderColor: 'cyan',
+        title: '🚀 Setup Complete',
+        titleAlignment: 'center'
+      }));
     } catch (err: any) {
       console.error(chalk.red(`Failed to update ${configFile}: ${err.message}`));
       console.log('Please add the following line manually:');
@@ -180,6 +195,34 @@ program
       db.close();
     }
   });
+
+const aliasPromo = program
+  .command('alias [name] [command]')
+  .alias('a')
+  .description('Manage command aliases')
+  .action(async (name, command) => {
+    if (name && command) {
+      await addAlias(name, command);
+    } else {
+      // If no name/command, show help for the alias command group
+      aliasPromo.outputHelp();
+    }
+  });
+
+aliasPromo
+  .command('add <name> <command>')
+  .description('Add a new command alias')
+  .action(addAlias);
+
+aliasPromo
+  .command('list')
+  .description('List all manual aliases')
+  .action(listAliases);
+
+aliasPromo
+  .command('remove <name>')
+  .description('Remove a command alias')
+  .action(removeAlias);
 
 // Handle the case where repty is called from shell hook
 if (process.argv[2] === '__capture__') {

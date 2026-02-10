@@ -4,6 +4,7 @@ import { CommandMatcher } from '../nlp/matcher';
 import { formatCommandList, formatChainList } from '../utils/formatter';
 import { getConfig } from '../utils/config';
 import { ChainDetector } from '../chains/detector';
+import chalk from 'chalk';
 
 export async function searchCommand(query: string): Promise<void> {
   const config = getConfig();
@@ -17,13 +18,23 @@ export async function searchCommand(query: string): Promise<void> {
     // Parse the natural language query
     const parsedQuery = parser.parse(query);
 
+    // Detect project root
+    const currentDir = process.cwd();
+    const projectRoot = db.findProjectRoot(currentDir);
+    
     // Build search filters
     const filters: SearchFilters = {
       startDate: parsedQuery.startDate,
       endDate: parsedQuery.endDate,
       commandType: parsedQuery.commandType,
-      keywords: parser.extractKeywords(parsedQuery)
+      keywords: parser.extractKeywords(parsedQuery),
+      directory: currentDir,
+      projectRoot: projectRoot || undefined
     };
+
+    if (projectRoot && projectRoot !== currentDir) {
+      console.log(chalk.dim(`  Project detected: ${projectRoot}\n`));
+    }
 
     // Search database for single commands
     const commands = db.searchCommands(filters, config.maxResults);
