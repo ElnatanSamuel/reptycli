@@ -11,7 +11,7 @@ import path from 'path';
 
 const execAsync = promisify(exec);
 
-export async function executeCommand(query: string): Promise<void> {
+export async function executeCommand(query: string, confirm: boolean = true): Promise<void> {
   const config = getConfig();
   const db = new CommandDatabase(config.dbPath);
   const parser = new NLPParser();
@@ -28,20 +28,25 @@ export async function executeCommand(query: string): Promise<void> {
     if (alias) {
       const commandsToRun = alias.type === 'chain' ? alias.commandsText.split(' && ') : [alias.commandsText];
       
-      const confirmMessage = alias.type === 'chain'
-        ? `${chalk.yellow('⛓ Sequence Alias:')} ${chalk.bold(alias.name)}\n${commandsToRun.map(c => `  ↳ ${c}`).join('\n')}?`
-        : `${chalk.cyan('Alias:')} ${chalk.bold(alias.name)} → ${chalk.bold(alias.commandsText)}?`;
+      if (confirm) {
+        const confirmMessage = alias.type === 'chain'
+          ? `${chalk.yellow('⛓ Sequence Alias:')} ${chalk.bold(alias.name)}\n${commandsToRun.map(c => `  ↳ ${c}`).join('\n')}?`
+          : `${chalk.cyan('Alias:')} ${chalk.bold(alias.name)} → ${chalk.bold(alias.commandsText)}?`;
 
-      const confirmAnswer = await inquirer.prompt([{
-        type: 'confirm',
-        name: 'execute',
-        message: confirmMessage,
-        default: true
-      }]);
+        const confirmAnswer = await inquirer.prompt([{
+          type: 'confirm',
+          name: 'execute',
+          message: confirmMessage,
+          default: true
+        }]);
 
-      if (confirmAnswer.execute) {
-        await runCommands(commandsToRun, alias.type === 'chain');
+        if (!confirmAnswer.execute) {
+          console.log(chalk.yellow('Execution cancelled.'));
+          return;
+        }
       }
+
+      await runCommands(commandsToRun, alias.type === 'chain');
       return;
     }
 
@@ -169,15 +174,8 @@ async function runCommands(commandsToRun: string[], isChain: boolean): Promise<v
       if (error.stderr) console.error(chalk.red(error.stderr));
       
       if (isChain) {
-        const stopAnswer = await inquirer.prompt([
-          {
-            type: 'confirm',
-            name: 'continue',
-            message: 'A command in the sequence failed. Continue with the rest?',
-            default: false
-          }
-        ]);
-        if (!stopAnswer.continue) break;
+        console.log(chalk.yellow('\n⚠ Stopping sequence due to command failure.'));
+        break;
       }
     }
   }

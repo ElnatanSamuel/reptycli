@@ -271,7 +271,7 @@ if (process.argv[2] === '__capture__') {
       db.close();
 
       if (alias) {
-        await executeCommand(possibleAlias);
+        await executeCommand(possibleAlias, false);
         return;
       } else {
         program.parse();
